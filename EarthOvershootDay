@@ -1,0 +1,19 @@
+library(ggplot2)
+library(dplyr)
+## change table name
+Erd_data = Erdueberlastungstag
+## change comma in 	'Verbrauch in Erdeinheiten' with point
+Erd_data$`Verbrauch in Erde-Einheiten`<- gsub(",",".",Erd_data$`Verbrauch in Erde-Einheiten`)
+## show Erd_data
+Erd_data
+## Verbauch Erdeinhgeiten und Jahr von char zu numerik
+Erd_data$Jahr <- as.numeric(Erd_data$Jahr)
+Erd_data$`Verbrauch in Erde-Einheiten` <- as.numeric(Erd_data$`Verbrauch in Erde-Einheiten`)
+ ## PLot the data 
+plot(Erd_data$`Jahr`, Erd_data$`Verbrauch in Erde-Einheiten`, type = 'o', main = 'Used earths per year', col = 'red',
+     pch= 16, cex= 0.5, sub = '
+     Data from "https://www.overshootday.org"
+     made by C. Papenfuss with R Studio' , cex.sub = 0.6,
+xlab = 'Year' , ylab = 'Earths used' )
+## Kommentar hinzufügen
+text(x = 2010, y = 1.2, "Massive decline in 2020 due to Lockdowns", cex = 1.1)
