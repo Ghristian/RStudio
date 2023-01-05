@@ -1,0 +1,7 @@
+#install(ggplot2)
+
+
+
+
+plot(Germany$`Gas Day Start`, Germany$`Full (%)`, xlab = "Year" , ylab = "Gas Storage of Germany in %", 
+     main = "Gas Storage in Germany from 2015 till now", type = "l", lwd= 0.001, col= "red" )
