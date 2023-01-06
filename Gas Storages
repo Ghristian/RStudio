@@ -1,7 +1,21 @@
-#install(ggplot2)
+TableGermany<-StorageData_GIE_Germany
+
+#show table
+View(TableGermany)
 
 
-
-
-plot(Germany$`Gas Day Start`, Germany$`Full (%)`, xlab = "Year" , ylab = "Gas Storage of Germany in %", 
+ #define number of data frames to split into
+ n <- 8
+ #Create new column with year extracted from 'Gas Day Start'
+ TableGermany$`Year` <- format(as.Date(TableGermany$`Gas Day Start`, format="%Y-%m-%d"),"%Y")
+ #create new column with day and month extracted
+ TableGermany$`Month & Day` <- format(as.Date(TableGermany$`Gas Day Start`, format="%Y-%m-%d"),"%m-%d")
+ 
+ #devide table by year 2015 till 2023
+ 
+ 
+ #replace 100% with 99.99 in column Full(%)
+ TableGermany['Full (%)'][TableGermany['Full (%)'] == '100'] <- '99.99'
+ 
+plot(TableGermany$`Month & Day`, TableGermany$`Full (%)`, xlab = "January till December" , ylab = "Gas Storage of Germany in %", 
      main = "Gas Storage in Germany from 2015 till now", type = "l", lwd= 0.001, col= "red" )
