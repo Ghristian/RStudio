@@ -1,5 +1,8 @@
+library(ggplot2)
+library(dplyr)
 TableGermany<-StorageData_GIE_Germany
-
+#show structure of TableGermany
+str(TableGermany)
 #show table
 View(TableGermany)
 
@@ -10,12 +13,21 @@ View(TableGermany)
  TableGermany$`Year` <- format(as.Date(TableGermany$`Gas Day Start`, format="%Y-%m-%d"),"%Y")
  #create new column with day and month extracted
  TableGermany$`Month & Day` <- format(as.Date(TableGermany$`Gas Day Start`, format="%Y-%m-%d"),"%m-%d")
- 
- #devide table by year 2015 till 2023
- 
- 
+ #create new column with month only
+ TableGermany$`Month` <- format(as.Date(TableGermany$`Gas Day Start`, format="%Y-%m-%d"),"%m")
+
+ #renaming some columns
+ colnames(TableGermany)[colnames(TableGermany) == 'Gas Day Start'] <- 'Date'
+ colnames(TableGermany)[colnames(TableGermany) == 'Gas in storage (TWh)'] <- 'GasStrgTWh'
+ colnames(TableGermany)[colnames(TableGermany) == 'Month & Day'] <- 'MaD'
  #replace 100% with 99.99 in column Full(%)
  TableGermany['Full (%)'][TableGermany['Full (%)'] == '100'] <- '99.99'
  
-plot(TableGermany$`Month & Day`, TableGermany$`Full (%)`, xlab = "January till December" , ylab = "Gas Storage of Germany in %", 
-     main = "Gas Storage in Germany from 2015 till now", type = "l", lwd= 0.001, col= "red" )
+plot(TableGermany$Month, TableGermany$GasStrgTWh, xlab = "January till December" , ylab = "Gas Storage of Germany in %", 
+     main = "Gas Storage in Germany from 2015 till now", type = "l", lwd= 0.1, col= "red" )
+
+#put Data into ggplot
+TableGermany%>%
+ ggplot(aes(x = MaD , y = GasStrgTWh , color =  Year  )) +
+  geom_line()
+#plot still broken
