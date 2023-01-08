@@ -20,14 +20,23 @@ View(TableGermany)
  colnames(TableGermany)[colnames(TableGermany) == 'Gas Day Start'] <- 'Date'
  colnames(TableGermany)[colnames(TableGermany) == 'Gas in storage (TWh)'] <- 'GasStrgTWh'
  colnames(TableGermany)[colnames(TableGermany) == 'Month & Day'] <- 'MaD'
+ colnames(TableGermany)[colnames(TableGermany) == 'Full (%)'] <- 'StrgPrCent'
  #replace 100% with 99.99 in column Full(%)
  TableGermany['Full (%)'][TableGermany['Full (%)'] == '100'] <- '99.99'
  
-plot(TableGermany$Month, TableGermany$GasStrgTWh, xlab = "January till December" , ylab = "Gas Storage of Germany in %", 
+ #round up all StrgPrCent Data to first 2 digits to cut the errors where the point is missing
+ TableGermany$StrgPrCent<- substr(TableGermany$StrgPrCent, 1, 2) 
+ 
+ # convert Columns to numeric and date
+ TableGermany$StrgPrCent <- as.numeric(as.character(TableGermany$StrgPrCent))
+ TableGermany$Year <- as.numeric(as.character(TableGermany$Year))
+
+ plot(TableGermany$Month, TableGermany$GasStrgTWh, xlab = "January till December" , ylab = "Gas Storage of Germany in %", 
      main = "Gas Storage in Germany from 2015 till now", type = "l", lwd= 0.1, col= "red" )
 
 #put Data into ggplot
-TableGermany%>%
- ggplot(aes(x = MaD , y = GasStrgTWh , color =  Year  )) +
+
+ ggplot(TableGermany, aes(x = MaD , y = StrgPrCent , color =  Year  )) +
   geom_line()
-#plot still broken
+#plot still  little broken
+
