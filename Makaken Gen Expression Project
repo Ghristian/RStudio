@@ -1,0 +1,508 @@
+
+#  1.Differential Gene Expression
+readcounts=read.table("Tutorial_macaques_readcounts.txt", header=TRUE, row.names=1, sep="\t", stringsAsFactors=FALSE)
+dim(readcounts)
+##readcounts Tabelle einlesen und Header ausgeben:
+## [1] 32386    50
+head(readcounts)
+
+
+## das gleiche für ids.txt
+coldata=read.table("Tutorial_macaques_ids.txt", header=TRUE, row.names=1, sep="\t", stringsAsFactors=FALSE)
+dim(coldata)
+## [1] 50  4
+head(coldata)
+
+#   2.DESeq
+# using DESeq2 by loading the library
+
+library("DESeq2")
+
+# LPS vs. NC muss festgelegt werden
+coldata$condition = factor(coldata$condition)   
+#Alternativ auch möglich:
+#coldata$condition = relevel(coldata$condition, ref = 'NC')
+
+#Jetzt DESeqDataSet objec erstellen und anschauen
+dds=DESeqDataSetFromMatrix(countData = readcounts, colData = coldata, design = ~ condition)
+dds
+
+#Um Noise von wenig transkrib. Genen zu reduzieren, removen wir alle Gene die weniger als 10 Reads in allen Samples haben
+keep = rowSums(counts(dds)) >= 10
+dds = dds[keep,]
+dds
+
+#Um Faktoren für Vergleich zu definieren nutzen wir die Funktion factor(), hier vergl. wir LPC mit NC
+dds$condition = factor(dds$condition, levels = c("NC","LPS"))
+
+
+#   2.2 Differential expression analysis
+#The function DESeq() implements all steps from normalization to the comparison
+dds = DESeq(dds)
+
+result = results(dds)
+result    # zeigt Ergebnisse von DESeq an
+
+#Um sich anzeigen zu lassen was Spaltenüberschriften bedeuten:
+mcols(result)$description
+
+#Um Noise zu reduzieren kann shrink benutzt werden. Daten werden aufgrund von effect-size.
+#Information von shrunken log2 fold changes (LFC) werden der Ergebnisstabelle zugeordnet.
+#Here we will save this into a new table.
+resultLFC = lfcShrink(dds, coef="condition_LPS_vs_NC", type="normal")
+
+resultLFC #um Ergebniss (neue Tabelle) anzuzeigen
+
+#für Zusammenfassung der Ergebnisse:
+summary(result)
+
+#Ergebnisse nach p-Wert sortieren und alle unter 0.1 zählen:
+resultOrdered = result[order(result$pvalue),]
+sum(result$padj < 0.1, na.rm=TRUE)
+#Das gleiche für p-Wert=0,05
+sum(result$padj < 0.05, na.rm=TRUE)
+
+#Gene mit einer False Discory Rate (FDR) von 0.05 rausfiltern und in neues Object tun
+result005 = results(dds, alpha=0.05)
+summary(result005)
+
+#   2.3 Ergebnisse erkunden
+
+#plotMA() wird genutzt log2 Fold changes vs. mean expression values (baseMean) für alle Gene zu Plotten.
+#Gene mit p<0.1 sind blau. Punkte mit grösseren oder kleineren Werte als die y-Achse werden als Dreiecke dargestellt.
+plotMA(result, ylim=c(-2,2))
+
+#plottet man die Shrunken Results ist die Noise wenig Transkrib. Gene reduziert
+plotMA(resultLFC, ylim=c(-2,2))
+
+#Das Ergebniss einzelner Gene kann auch geplottet werden. Hier Gen mit kl. p-Wert.
+#In dem Plott sind Counts normalisiert nach Sequenz-Tiefe und ein Pseudocount von 1/2 wird addiert für log-Skala
+plotCounts(dds, gene=which.min(result$padj), intgroup="condition")
+
+#  2.4 Ergebnisse exportieren
+# ergebnisse als CSV-Datei mit Namen "DESeq2_DEgenes_condition_LPS_NC.csv" exportieren.
+write.csv(as.data.frame(resultOrdered), file="DESeq2_DEgenes_condition_LPS_NC.csv")
+
+
+#  3 EdgeR
+#commmon used package um Differentierte Gen Expression zu berechnen. 
+#Nutzt empirical Bayes estimation ^ exakte Tests basierend auf negativ binomial Verteilung 
+
+#edgeR library laden
+library("edgeR")
+
+#create object mit read count ^ sample Info, dann rufe es auf
+count_edgeR_obj=DGEList(counts=readcounts, group=coldata$condition)
+count_edgeR_obj
+
+#  3.1 Normalisation
+#edgeR benutzt quantil-adjusted conditional maximum liklyhood (qCML) um dispersion zu schätzen
+#bevor 2 samples verglichen werden. Zuerst common disperion dann dispersion für jedes Gen.
+#implementiert empirisch. Bayer Strategie um Gene Dispersion der common disperan anzugleichen. Dauert etwas.
+count_edgeR_obj=estimateCommonDisp(count_edgeR_obj)
+count_edgeR_obj=estimateTagwiseDisp(count_edgeR_obj)
+
+#  3.2Verschiedene Expression berechnen
+#edgeR adjusts p-Value with Benjamini&Hochberg methode per default.
+edgeR_DEgenes=exactTest(count_edgeR_obj)
+edgeR_DEgenes
+
+#function topTags() zeigt meist expressed Gen an (basiert auf p-Wert)
+topTags(edgeR_DEgenes)
+
+#um Top verschieden Expressierter Gene anzuzeigen (basierend auf fold change) benutze:
+topTags(edgeR_DEgenes, sort.by = "logFC")
+
+#um erhaltene Tabelle in schön anzuschauen:
+edgeR_DEgenesTable=edgeR_DEgenes$table
+head(edgeR_DEgenesTable)
+
+#jetzt extrahieren wir signifikante Gene (p-Wert<0,05)
+signedgeR_DEgenes=edgeR_DEgenesTable[edgeR_DEgenesTable[,3]<0.05,]
+
+#Ergebnis csv mit Genen (sortiert nach p-Wert) schreiben
+edgeROrdered <- edgeR_DEgenesTable[order(edgeR_DEgenesTable$PValue),]
+write.csv(as.data.frame(edgeR_DEgenesTable), file="edgeR_DEgenes_condition_LPS_NC.csv")
+
+#Übungen 1-3
+# 1.Which method calls more significant genes, DESeq2 or edgeR?
+#Deseq2 hat nur 21389 Gene in die CSV gespeisst, bei edgeR wurden 32386 Gene eingespeisst.
+# 2.How many genes were called differentially expressed with both methods? Hint: check out %in%
+
+# 3.A venn diagram is also a good way to visualize overlap. Check out the eulerr package.
+library(eulerr)
+set.seed(1)
+
+s5 <- c(A =signedgeR_DEgenes, B =dds )
+
+plot(venn(s5))
+plot(euler(s5), quantities = TRUE) #does not work propperly i need table with Gen names only
+
+# 3.3 DESeq2 Interaction between factors
+#use colData() um alle Faktoren des Experiments anzusehen
+library(DESeq2)
+colData(dds)
+
+#mit unique() kann nach einer liste aller Gruppem oder Raenge gefragt werden
+unique(colData(dds)$study_group)
+unique(colData(dds)$rank)
+
+#wir wollen nun die Raenge in Treatment vs Control einbeziehen. Raenge muessen zu Factoren konvertiert werden.
+coldata$rank = as.factor(coldata$rank)
+
+#wir machen ein neues DESeqDataSet object mit count für jedes gen in jedem Sample.
+dds_interact=DESeqDataSetFromMatrix(countData = readcounts, 
+                                    colData = coldata, 
+                                    design = ~ condition + rank + condition:rank)
+dds_interact
+
+#Um noise zu reduzieren remove all genes with <10 Reads insgesamt in allen Samples.
+keep = rowSums(counts(dds_interact)) >= 10
+dds_interact = dds_interact[keep,]
+dds_interact
+
+#Spezifizieren der Faktoren für Vergleich, hier Condition(LPS oder NC) und Rang
+dds_interact$condition = factor(dds_interact$condition, levels = c("NC","LPS"))
+dds_interact$rank = factor(dds_interact$rank, levels = c("1","2","3","4","5"))
+
+
+# 3.4 Differntial Expression Analyse
+
+dds_interact = DESeq(dds_interact)
+#dauert etwas
+
+#ergebnisse anzeigen lassen
+results(dds_interact)
+
+
+#um vergleich zu zeigen benutzen wir resultNames() auf dem DESeq object.
+resultsNames(dds_interact)
+
+
+#Aufgaben
+#1.The main effect (treatment vs. control) for first group (Rank 1).
+
+#2.Rank 1 vs. Rank 5.
+
+#3.The condition effect for Rank 2 (takes a few seconds). This is the main effect plus the interaction term.
+
+#4.Interaction term for condition effect in Rank 2 vs. Rank 5 to find out whether the condition effect is 
+#different between these two ranks.
+
+#5.How many genes differ in their change between treatment vs. control between Rank 2 and Rank 5? Hint: 
+#To summarize the results and see what the columns in the results object mean, 
+#you need to assign the output of results to a variable.
+
+
+
+#   4.Networks
+# TF Netzwerk fuer LPS Gruppe und eins fuer NC Gruppe. Um diese dann mit CoDiNA zu vergleichen.
+
+require(wTO)
+require(magrittr)
+
+#4.1aufteilen der Daten in Kontroll und Behandlungsgruppe
+#Sammeln der NC Samples
+NC = readcounts[,coldata$condition == 'NC']
+dim(NC)
+
+#Entfernen alles Gene mit weniger als 10 Reads
+NC = NC[rowSums(NC)> 10,]
+dim(NC)
+
+#Sammeln aller Behandelten Samples (LPS) 
+LPS = readcounts[,coldata$condition == 'LPS']
+dim(LPS)
+#entf. aller Gene mit Counts<10
+LPS = LPS[rowSums(LPS)> 10,]
+dim(LPS)
+
+#anzeigen der Ergebnisse
+summary(result)
+
+#Selektion der signifikanten Gene aus Tabelle mit LPS und NC Samples
+DE_genes = subset(row.names(result), result$padj<0.01)
+NC = subset(NC, row.names(NC) %in% DE_genes)
+LPS = subset(LPS, row.names(LPS) %in% DE_genes)
+
+#fuer TF Netzwerk brauchen wir die TFs dafuer TF-Liste einlesen
+TFs = read.table("TFs.txt", header=TRUE, sep="\t", stringsAsFactors=FALSE)
+dim(TFs)
+
+TFs = TFs[,1]
+length(TFs)
+
+# Wir haben 1834 TFs erhalten. Aber Gen IDs unterschiedlich. Um IDs anzugleichen nutzen wir Biomart und 
+#aendern Ensembl Gen IDs in NCvsLPS Tabelle zu GeneSymbols.So können wir uns ein Netzwerk anzeigen lassen.
+
+#Biomart laden
+library(biomaRt)
+
+# function listMarts() hilft uns, zeigt alle Marts und ein Datensatz an
+listMarts()
+
+#wir brauchen emsembl 
+ensembl=useMart("ensembl")
+
+#wir muessen richtige Spezies auswaehlen. listDataset() zeigt alle moeglichen Spezies an.
+#liste sehr lang wir brauchen rhesus macaque welches (mmulatta_gene_ensembl)entspricht.
+#mit useDataset() koennen wir eigene Mart bauen.
+listDatasets(ensembl)
+mart = useDataset("mmulatta_gene_ensembl", useMart("ensembl"))
+
+#wir wollen Ensembl Gene IDs zu GeneSymbols aendern.
+# funktion listAttributes() printet alle available Attributes
+expressedGenes=row.names(result)
+listAttributes(mart)
+
+#jetzt koennen wir getBM() und passenden Filtern, Attribute und Werte nutzen. Filter: filtern Gene ohne 
+#Ensemble Gene ID raus.Attribute: sagt wir wollen Ensemble Gen IDs und deren Externe Gen Namen. Werte: sagen an 
+#wir wollen das nur fuer expressed Gene.  dauert etwas 
+GeneSymbols = getBM(filters= "ensembl_gene_id", attributes= c("ensembl_gene_id", 'external_gene_name'),values=expressedGenes,mart= mart)
+dim(GeneSymbols)
+
+#anzeigen
+head (GeneSymbols)
+
+#Tabelle 'GeneSymbols' hat zwei Spalten, wir koennen nun substEnsemble IDs mit GenSymbols in LPSvsNC Tabelle matchen.
+#Achtung manche Gene haben kein Gensymbol sondern nur NA. Einige Gene sind dubliziert(versch. Isoformen).
+#Wir reformieren nun LPSvsNC Tabelle so dass sie nur GenSymbole enthaelt. Dazu benutzen wir "playr".
+
+require(plyr)
+
+LPS$ensembl_gene_id = row.names(LPS)
+LPS = join(LPS, GeneSymbols, type = 'inner', match = 'first') 
+
+head(LPS)
+
+#duplikate entfernen
+LPS = LPS[!duplicated(LPS$external_gene_name), ]
+row.names(LPS) = LPS$external_gene_name
+head(LPS)
+
+ncol(LPS)
+
+names(LPS)
+
+#entfernen der ersten Spalte mit Ensembl IDs und letzte Spalte mit GenSymbolen
+LPS = LPS[, -c(1,27)]
+head(LPS)
+
+dim(LPS)
+
+#gleiche Reformation mit gleicher Annotation fuer NC Tabelle
+NC$ensembl_gene_id = row.names(NC)
+NC = join(NC, GeneSymbols, type = 'inner', match = 'first') 
+#anzeigen lassen
+head(NC)
+#entf. der dublikate
+NC = NC[!duplicated(NC$external_gene_name), ]
+row.names(NC) = NC$external_gene_name
+head(NC)
+
+ncol(NC)
+
+dim(NC)
+
+names(NC)
+
+#entfernen der ersten und letzen Spalte
+NC = NC[, -c(1,27)]
+head(NC)
+
+# 4.2 Netzwerk Konstrukton
+
+#wir haben alle Infos fuer's Netzwerk. wTO macht bootstrapping analyse um zu ueberpruefen ob gefolgere
+#Verbindungen stimmen. In reeler Analyse sollte man 1000 bootstraps benutzen hier machen wir nur 10 um Zeit zu sparen.
+
+#TFS = Knoten, Korrelationen werden fuer alle TFs und alle expressed Genes berechnet. Output network_NC
+#ist ein Object mit Infos zu Knoten und wTO- sowie p-Werten. dauert ca. 5min
+
+network_NC = wTO.Complete(n = 10, k = 5,  Data = NC, 
+                          method_resampling = 'Bootstrap', 
+                          Overlap = TFs, method = 's', plot = F) 
+
+#anzeigen lassen
+network_NC
+
+#auswahl der tabelle mit Information zu Knoten, wTO- und p-Werten.
+network_NC = network_NC$wTO
+head(network_NC)
+
+#wenn das Gewicht der Verbindung insiknifikant ist setze wTO=0
+network_NC$wTO = ifelse(network_NC$Padj_sig<0.05, network_NC$wTO_sign, 0 )
+head(network_NC)
+
+#Entferne alles aus Output Tabelle außer Knoteninfo und wTO zw. Knoten
+network_NC = network_NC[,c(1:2,9)] %>% as.data.frame()
+head(network_NC)
+
+#Gleicher Vorgang fuer das LPS Netzwerk:
+network_LPS = wTO.Complete(n = 10,  Data = LPS, method_resampling = 'Bootstrap', Overlap = TFs, method = 's', plot = F) 
+
+network_LPS =network_LPS$wTO
+network_LPS$wTO = ifelse(network_LPS$Padj_sig <0.05, network_LPS$wTO_sign, 0 )
+
+network_LPS = network_LPS[,c(1,2,9)] %>% as.data.frame()
+
+head(network_LPS)
+
+#Verteilung als Histogramm anzeigen:
+hist(network_LPS$wTO)
+
+hist(network_NC$wTO)
+
+#  4.3Netzwerke mit CoDiNA vergleichen
+#vergleich der Netze Nc und LPS
+
+require(CoDiNA)
+
+#MakeDiffNet() braucht Lieste an Netzwerken und Code(name jedes Netzwerks) 
+#Knotennamen muessen zuerst zu Characternamen werden.
+network_NC$Node.1 = as.character(network_NC$Node.1)
+network_NC$Node.2 = as.character(network_NC$Node.2)
+
+Diff_LPS_NC = MakeDiffNet(Data = list(network_NC, network_LPS), Code = c('NC', 'LPS'))
+
+#Das Ergebniss object: Diff_LPS_NC enthaelt Info zu Zahl aller Knoten und Verbindungen.
+#Enthaelt ebenfalls Kategorie jeder Verbindung, Subkategorie und Werte. 
+
+Diff_LPS_NC
+
+#Zum anzeigen benutze 'View()'
+View(Diff_LPS_NC)
+
+#phi_tilde= Mass wie zentram Knoten ist.Verbindungen näher am Zentrum des Wuerfels
+#sind schwächer als Verbindungen naeher an Knoten.
+#Internal_score= misst distanz vom Verbindungsgewicht(p (ij,k)) zu Kategorischem Gewicht (P-(ij,k)).
+Diff_LPS_NC_clean = subset(Diff_LPS_NC, 
+                           Diff_LPS_NC$Score_Phi_tilde/Diff_LPS_NC$Score_internal > 1)
+Diff_LPS_NC_clean
+
+#Klassifizierung der Knoten(Gene) des DiffernezNetwerks
+#Funktion ClusterNodes() braucht 3 Parameter.
+#cleaned Netzwerk, externer Cutoff(min Wert fuer Phi_tilde Score) je naeher an 1 desto weniger Knoten bekommt man.
+#interner Cutoff (min Wert fuer Score_internal, je naeher an 0 desto weniger Knoten bekommt man).
+#weil Netzwerk schon gesaeubert, externer Wert=0 und interner Wer=1. Das macht alle Knoten des ges. Netzwerks geclustered.
+DiffNodes = ClusterNodes(Diff_LPS_NC_clean, 
+                         cutoff.external = 0, 
+                         cutoff.internal = 1)
+DiffNodes
+
+#Ergebniss als Saeulen Diagramm:
+barplot(table(DiffNodes$Phi_tilde))
+
+#Netzwerk anzeigen:
+plot(Diff_LPS_NC_clean, layout = 'layout_with_drl')
+
+#Netzwerk mit anderen Cutoffs
+plot(Diff_LPS_NC_clean, 
+     cutoff.external = 0.8, 
+     cutoff.internal = 0.3, 
+     layout = 'layout_with_drl')
+
+#  4.4Infos ueber Knoten(Gene) extrahieren
+
+#wir koennen auch subset der common(alpha) und spefifischen(gamma) Knoten jedes Netzwerks unterteilen.
+#Resultat wird in neuem File gespeichert.
+
+common_genes = subset(DiffNodes$Node, DiffNodes$Phi_tilde == 'a')
+LPS_genes = subset(DiffNodes$Node, DiffNodes$Phi_tilde == 'g.LPS')
+NC_genes = subset(DiffNodes$Node, DiffNodes$Phi_tilde == 'g.NC')
+
+length(common_genes)
+
+length(LPS_genes)
+
+length(NC_genes)
+
+write.table(common_genes, 'CoDiNA_common.txt', quote = F, row.names = F)
+write.table(NC_genes, 'CoDiNA_NC.txt', quote = F, row.names = F)
+write.table(LPS_genes, 'CoDiNA_LPS.txt', quote = F, row.names = F)
+
+#Augabe:
+#Make a wTO network (one for NC and one for LPS) that has all differentially expressed genes as 
+#nodes taking into account only all differentially expressed genes. Compare the networks using CoDiNA.
+#How many nodes are common, LPS specific, or NC specific? Save a list of their gene names.
+
+# 5.0 Gene Ontology (GO) Enrichment
+
+#mittels TopGO analysieren ob unterschiedlich expressed Gene fuer bestimmte Kategorien angereichert sind
+# biomaRt laden und Mart & Dataset auswaehlen.
+library(biomaRt)
+listMarts()
+ensembl=useMart("ensembl")
+listDatasets(ensembl)
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+
+#anzeigen von Tabelle GenSymbole
+head (GeneSymbols)
+
+dim(GeneSymbols)
+
+#neue Liste ohne Duplikate erstellen
+uniqGenesymbols = unique(GeneSymbols[,2])
+head(uniqGenesymbols)
+
+length(uniqGenesymbols)
+#neue Liste nur 1/3 so gross
+#wir nutzen diese um GO IDs mit Biomart zu bekommen
+GeneGONames = getBM(filters= "hgnc_symbol", attributes= c("hgnc_symbol", "go_id"),values=uniqGenesymbols, mart= mart)
+
+#5.1 Enrichment analysis mit TopGO
+#topGO laden
+library("topGO")
+
+#Um TopGO object zu kreieren braquchen wir liste aller Gene,signifikante Gene, und Genes2GO mapping.
+#Liste aller Gene in uniqGeneSymbol Liste. DE_Genes sind noch in EnsemblIDs und muessen konvertiert werden.
+head(GeneSymbols)
+
+DEGenesymbols = subset(GeneSymbols, GeneSymbols$ensembl_gene_id %in% DE_genes)
+uniqDEGenesymbols = unique(DEGenesymbols[,2])
+length(uniqDEGenesymbols)
+
+#TopGO möchte nun Gen-Listen kombiniert. Und in Vektorform. Dafuer:
+geneList = factor(as.integer(uniqGenesymbols %in% uniqDEGenesymbols))
+names(geneList) = uniqGenesymbols
+str(geneList)
+
+#Nun muessen wir die Genes2GO mapping reformieren fuer das richtige TopGO Format.
+#Konvertierung der gesamten Tabelle:
+GeneGONames[GeneGONames[,1]=="PDPN",1:2]
+
+Genes2GO = matrix(,length(uniqGenesymbols),2)
+for (i in 1:length(uniqGenesymbols))
+{
+  temp=GeneGONames[GeneGONames[,1]==uniqGenesymbols[i],1:2]
+  tempGOs = paste(temp[,2], collapse=",")
+  Genes2GO[i,1]=temp[1,1]
+  Genes2GO[i,2]=tempGOs
+}
+write.table(Genes2GO, "Genes2Go.txt", quote=FALSE, row.names=FALSE, col.names=FALSE, se="\t")
+Genes2GOmap=readMappings(file = "Genes2Go.txt")
+str(head(Genes2GOmap))
+
+#irgendwie Fehler?!!
+#Nun topGODaten Objekt erstellen. Wir testen fuer Molekulare Funktionen (MF).
+GOdata = new("topGOdata", ontology = "MF", allGenes = geneList, annot = annFUN.gene2GO, gene2GO = Genes2GOmap)
+#anzeigen lassen
+GOdata
+
+#Fisher analyse
+resultFisher = runTest(GOdata, algorithm = "classic", statistic = "fisher")
+resultFisher
+#Sammeln signif. GO Gruppen
+sigterms = resultFisher@geneData["SigTerms"]
+sigterms
+
+sigGOIDs = GenTable(GOdata, classicFisher = resultFisher, topNodes = sigterms)
+head(sigGOIDs)
+
+#Korrektur mit Benjamini-Hochberg MEthode und sammeln extremster Ergebnisse
+qval = p.adjust(sigGOIDs$classicFisher, met='BH')
+sigGOIDscorrected = cbind(sigGOIDs, qval)
+head(sigGOIDscorrected, n=30)
+#plotten:
+library("Rgraphviz")
+#anzeigen lassen:
+showSigOfNodes(GOdata, score(resultFisher), firstSigNodes = 5, useInfo = 'all')
