@@ -1,0 +1,18 @@
+setwd("D:/R Studio Projekte")
+install.packages("ggplot2")
+
+library(ggplot2)
+##source: "https://de.statista.com/statistik/daten/studie/315946/umfrage/entwicklung-der-militaerausgaben-der-ukraine/"
+time <- 2006 : 2021
+spndng <- c(2.57,3.53,4.14,2.32,2.59,2.5,2.84,2.9,3,2.96,2.94,3.25,4.17,5.42,5.92,5.94) 
+
+spndngBIP <- c(2.39,2.47,2.3,1.91,1.9,1.53,1.61,1.58,2.25,3.25,3.15,2.88,3.19,3.52,3.81,3.23)
+
+Dataset <- data.frame(time = time, spndng = spndng, spndngBIP = spndngBIP)
+
+ggplot()+
+  geom_line(data = Dataset, mapping = aes(x=time , y= spndng), color = "blue")+
+              geom_point(data = Dataset, mapping = aes(x=time , y= spndng), color = "blue")+
+  geom_line(data = Dataset, mapping = aes(x= time , y = spndngBIP), color = "yellow")+
+    geom_point(data = Dataset, mapping = aes(x=time , y= spndngBIP), color = "yellow")+
+    labs(x= "Year", y= "Military spending of Ukraine: in bil. US$ (blue) & in percent of BIP (yellow)")
