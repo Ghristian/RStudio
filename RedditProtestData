@@ -1,1 +1,23 @@
-plot(#Anzahl boybottiert maximal -e^x)
+install.packages("ggplot2")
+library(ggplot2)
+  
+#change names
+redditdata=Reddark_1_
+
+
+ggplot(redditdata,aes(x= Date,y= SubsDark))+
+#limit y axis at 8829
+   ylim(0,8829)+
+  #plot the data points
+   geom_point(aes(color="red",size=2))+
+  #change axis names and title
+   labs(x='Day and Month of 2023', y='Number of subreddits that got dark',
+        title = 'Number of subreddits that participaded in "Reddit goes dark\n',
+        subtitle = 'Subreddits with restricted access or subreddits that went private were counted as "went dark"
+        \n Source: https://reddark.untone.uk \n ')+
+   # connect dots with line
+  geom_line(aes(color="red",size=1))+
+  # geam smooth to show trend 
+   geom_smooth(method = "auto" )+
+  #remove legend
+  theme(legend.position="none")
